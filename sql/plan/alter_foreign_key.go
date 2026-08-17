@@ -689,19 +689,31 @@ func foreignKeyComparableTypes(ctx *sql.Context, type1 sql.Type, type2 sql.Type)
 	return false
 }
 
-// exprsAreIndexPrefix returns whether the given expressions are a prefix of the given index expressions
+// exprsAreIndexPrefix returns whether the given expressions are the same set as
+// the prefix of the given index expressions. SQL foreign-key column order
+// defines the child-to-parent mapping, but PostgreSQL permits the matching
+// referenced unique key to store those columns in a different order.
 func exprsAreIndexPrefix(exprs, indexExprs []string) bool {
 	if len(exprs) > len(indexExprs) {
 		return false
 	}
 
-	for i := 0; i < len(exprs); i++ {
-		if exprs[i] != indexExprs[i] {
+	remaining := make(map[string]int, len(exprs))
+	for _, expr := range exprs {
+		remaining[expr]++
+	}
+	for _, indexExpr := range indexExprs[:len(exprs)] {
+		count := remaining[indexExpr]
+		if count == 0 {
 			return false
 		}
+		if count == 1 {
+			delete(remaining, indexExpr)
+		} else {
+			remaining[indexExpr] = count - 1
+		}
 	}
-
-	return true
+	return len(remaining) == 0
 }
 
 func lowercaseSlice(strs []string) []string {
