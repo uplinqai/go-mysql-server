@@ -397,3 +397,28 @@ func TestWindowedAggFuncs(t *testing.T) {
 	}
 
 }
+
+func TestDefaultRangeFramerIncludesOrderPeers(t *testing.T) {
+	ctx := sql.NewEmptyContext()
+	orderBy := expression.NewGetField(0, types.Int64, "order_key", false)
+	value := expression.NewGetField(1, types.Int64, "value", false)
+	window := &sql.WindowDefinition{OrderBy: sql.SortFields{{Column: orderBy, Order: sql.Ascending}}}
+
+	agg, err := NewSumAgg(value).WithWindow(ctx, window)
+	require.NoError(t, err)
+	framer, err := agg.DefaultFramer().NewFramer(sql.WindowInterval{Start: 0, End: 3})
+	require.NoError(t, err)
+
+	buffer := sql.WindowBuffer{{int64(1), int64(10)}, {int64(1), int64(20)}, {int64(2), int64(30)}}
+	var got []sql.WindowInterval
+	for {
+		interval, err := framer.Next(ctx, buffer)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		got = append(got, interval)
+	}
+
+	require.Equal(t, []sql.WindowInterval{{Start: 0, End: 2}, {Start: 0, End: 2}, {Start: 0, End: 3}}, got)
+}
